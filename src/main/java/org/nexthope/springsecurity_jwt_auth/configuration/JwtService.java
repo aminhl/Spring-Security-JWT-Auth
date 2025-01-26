@@ -3,15 +3,19 @@ package org.nexthope.springsecurity_jwt_auth.configuration;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
+import org.nexthope.springsecurity_jwt_auth.user.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -23,6 +27,9 @@ public class JwtService {
 
     @Value("${jwt.secret}")
     private String jwtSecret;
+
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
 
     /**
      * Extracts the username from the provided JWT access token.
@@ -52,19 +59,12 @@ public class JwtService {
      * @throws RuntimeException if the Jwt access token is null, empty or invalid
      */
     private Claims extractAllClaims(final String accessToken) {
-        try {
-            return Jwts
-                    .parserBuilder()
-                    .setSigningKey(getSingingKey())
-                    .build()
-                    .parseClaimsJws(accessToken)
-                    .getBody();
-        }
-        catch (JwtException e) {
-            throw new RuntimeException("Invalid JWT token: " + e.getMessage(), e);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("JWT token is null or empty", e);
-        }
+        return Jwts
+                .parserBuilder()
+                .setSigningKey(getSingingKey())
+                .build()
+                .parseClaimsJws(accessToken)
+                .getBody();
     }
 
     /**
@@ -78,12 +78,8 @@ public class JwtService {
      * @return {@code true} if the token is valid and belongs to the provided user, {@code false} otherwise
      */
     public boolean isTokenValid(final String accessToken, UserDetails user) {
-        try {
-            String userName = extractUsername(accessToken);
-            return userName.equals(user.getUsername()) && !isTokenExpired(accessToken);
-        } catch (Exception e) {
-            return false;
-        }
+        String userName = extractUsername(accessToken);
+        return userName.equals(user.getUsername()) && !isTokenExpired(accessToken);
     }
 
     /**
@@ -92,11 +88,7 @@ public class JwtService {
      * @return {@code true} if the token is expired, {@code false} otherwise
      */
     private boolean isTokenExpired(final String accessToken) {
-        try {
-            return extractTokenExpiration(accessToken).before(new Date());
-        } catch (Exception e) {
-            return true;
-        }
+        return extractTokenExpiration(accessToken).before(new Date());
     }
 
     /**
@@ -118,12 +110,25 @@ public class JwtService {
      * @throws RuntimeException if the JWT secret key is invalid
      */
     private Key getSingingKey() {
-        try {
-            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-            return Keys.hmacShaKeyFor(keyBytes);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("Invalid JWT secret key", e);
-        }
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    public String generateAccessToken(final UserDetails user) {
+        return buildToken(user, new HashMap<>(), jwtExpiration);
+    }
+
+    public String generateAccessToken(final UserDetails user, final Map<String, Object> claims) {
+        return buildToken(user, claims, jwtExpiration);
+    }
+
+    private String buildToken(final UserDetails user, final Map<String, Object> claims, final long tokenExpiration) {
+        return Jwts.builder()
+                .signWith(getSingingKey(), SignatureAlgorithm.HS256)
+                .setClaims(claims)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + tokenExpiration))
+                .setSubject(user.getUsername())
+                .compact();
+    }
 }
