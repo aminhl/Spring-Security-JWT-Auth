@@ -41,14 +41,15 @@ public class JwtService {
      * @param <T> the type of the claim to be extracted
      */
     private <T> T extractClaim(String accessToken, Function<Claims, T> claimsResolver) {
-        Claims allClaims = extractAllClaims(accessToken);
-        return claimsResolver.apply(allClaims);
+        Claims claims = extractAllClaims(accessToken);
+        return claimsResolver.apply(claims);
     }
 
     /**
      * Extracts all claims from the provided JWT access token.
      * @param accessToken the JWT access token from which the claims are to be extracted; must not be null or empty.
      * @return the claims contained in the token
+     * @throws RuntimeException if the Jwt access token is null, empty or invalid
      */
     private Claims extractAllClaims(final String accessToken) {
         try {
@@ -114,6 +115,7 @@ public class JwtService {
      * to generate an HMAC-SHA key suitable for JWT signing.
      * </p>
      * @return the signing {@link Key} derived from the configured secret key
+     * @throws RuntimeException if the JWT secret key is invalid
      */
     private Key getSingingKey() {
         try {
