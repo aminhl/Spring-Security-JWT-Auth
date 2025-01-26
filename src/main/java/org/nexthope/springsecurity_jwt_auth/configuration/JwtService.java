@@ -1,6 +1,7 @@
 package org.nexthope.springsecurity_jwt_auth.configuration;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -21,7 +22,7 @@ import java.util.function.Function;
 public class JwtService {
 
     @Value("${jwt.secret}")
-    private String JWT_SECRET;
+    private String jwtSecret;
 
     /**
      * Extracts the username from the provided JWT access token.
@@ -50,12 +51,19 @@ public class JwtService {
      * @return the claims contained in the token
      */
     private Claims extractAllClaims(final String accessToken) {
-        return Jwts
-                .parserBuilder()
-                .setSigningKey(getSingingKey())
-                .build()
-                .parseClaimsJwt(accessToken)
-                .getBody();
+        try {
+            return Jwts
+                    .parserBuilder()
+                    .setSigningKey(getSingingKey())
+                    .build()
+                    .parseClaimsJws(accessToken)
+                    .getBody();
+        }
+        catch (JwtException e) {
+            throw new RuntimeException("Invalid JWT token: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("JWT token is null or empty", e);
+        }
     }
 
     /**
@@ -69,8 +77,12 @@ public class JwtService {
      * @return {@code true} if the token is valid and belongs to the provided user, {@code false} otherwise
      */
     public boolean isTokenValid(final String accessToken, UserDetails user) {
-        String userName = extractUsername(accessToken);
-        return userName.equals(user.getUsername()) && !isTokenExpired(accessToken);
+        try {
+            String userName = extractUsername(accessToken);
+            return userName.equals(user.getUsername()) && !isTokenExpired(accessToken);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -79,7 +91,11 @@ public class JwtService {
      * @return {@code true} if the token is expired, {@code false} otherwise
      */
     private boolean isTokenExpired(final String accessToken) {
-        return extractTokenExpiration(accessToken).before(new Date());
+        try {
+            return extractTokenExpiration(accessToken).before(new Date());
+        } catch (Exception e) {
+            return true;
+        }
     }
 
     /**
@@ -100,8 +116,12 @@ public class JwtService {
      * @return the signing {@link Key} derived from the configured secret key
      */
     private Key getSingingKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(JWT_SECRET);
-        return Keys.hmacShaKeyFor(keyBytes);
+        try {
+            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+            return Keys.hmacShaKeyFor(keyBytes);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid JWT secret key", e);
+        }
     }
 
 }
